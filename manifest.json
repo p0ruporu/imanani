@@ -1,0 +1,9 @@
+{
+  "name": "いまなにする時計",
+  "short_name": "いまなにする",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#F7F9FB",
+  "theme_color": "#F7F9FB",
+  "icons": [{"src": "icon.png", "sizes": "512x512", "type": "image/png"}]
+}

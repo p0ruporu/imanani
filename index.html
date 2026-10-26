@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>いまなにする時計</title>
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="icon" href="icon.png">
+<link rel="manifest" href="manifest.json">
+<style>*,*::before,*::after{box-sizing:border-box}html{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
+
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="いまなにする">
+<meta name="theme-color" content="#F7F9FB">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&display=swap">
+<style>
+/* Layout: one narrow column, phone-first. Clock face is the hero; text cards stack below. Single light look by request. */
+:root{
+  --bg:#F7F9FB;
+  --ink:#2B3442;
+  --ink-soft:#5E6878;
+  --ink-faint:#9AA3B0;
+  --card:#FFFFFF;
+  --line:#E3E8EE;
+  --face:#FFFFFF;
+  --font:"Zen Maru Gothic","Hiragino Maru Gothic ProN","Hiragino Sans","Yu Gothic",sans-serif;
+  color-scheme:light;
+}
+html,body{background:var(--bg);color:var(--ink)}
+body{
+  font-family:var(--font);font-weight:500;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:16px 28px;
+  -webkit-text-size-adjust:100%;
+}
+.wrap{max-width:440px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+.date{display:flex;align-items:baseline;justify-content:center;gap:10px;flex-wrap:wrap;text-align:center}
+.date .d{font-size:1.35rem;font-weight:700;letter-spacing:.02em}
+.badge{font-size:.8rem;font-weight:700;padding:3px 10px;border-radius:999px;background:var(--card);border:1px solid var(--line);color:var(--ink-soft)}
+.badge.off{background:#EEF1F4;color:var(--ink)}
+.clock{width:100%;max-width:340px;margin:0 auto;aspect-ratio:1;display:block}
+.now{border-radius:22px;padding:18px 16px 16px;text-align:center;transition:background-color .4s}
+.now .lbl{font-size:.75rem;letter-spacing:.12em;color:var(--ink-soft);font-weight:700}
+.now .what{font-size:2.3rem;font-weight:900;line-height:1.25;text-wrap:balance;margin-top:4px}
+.remain{text-align:center;font-size:1.15rem;font-weight:700;font-variant-numeric:tabular-nums}
+.remain b{font-size:1.5rem;font-weight:900}
+.next{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 14px}
+.next .tag{font-size:.72rem;font-weight:700;color:var(--ink-soft);letter-spacing:.08em;flex:none}
+.dot{width:14px;height:14px;border-radius:50%;flex:none}
+.next .t{font-variant-numeric:tabular-nums;font-weight:700;color:var(--ink-soft);flex:none}
+.next .n{font-weight:700;min-width:0}
+.list{list-style:none;margin:0;padding:6px;background:var(--card);border:1px solid var(--line);border-radius:18px;display:flex;flex-direction:column;gap:2px}
+.list li{display:flex;align-items:center;gap:12px;padding:9px 10px;border-radius:12px}
+.list .t{font-variant-numeric:tabular-nums;font-size:.9rem;color:var(--ink-soft);width:7.2em;flex:none}
+.list .n{font-weight:700;min-width:0}
+.list li.past{opacity:.4}
+.list li.cur{font-size:1.05rem}
+.list li.cur .t{color:var(--ink)}
+.list li.cur .n{font-weight:900}
+.list li.cur::after{content:"いま";margin-left:auto;font-size:.72rem;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--ink);color:var(--card)}
+.toggle{appearance:none;border:1.5px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-weight:700;font-size:1rem;padding:14px;border-radius:16px;cursor:pointer;width:100%}
+.toggle:active{transform:scale(.98)}
+.toggle:focus-visible{outline:3px solid #B9D4EE;outline-offset:2px}
+.note{text-align:center;font-size:.78rem;color:var(--ink-faint);min-height:1em}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="date"><span class="d" id="dateText"></span><span class="badge" id="dayBadge"></span></div>
+  <svg class="clock" id="clock" viewBox="0 0 300 300" role="img" aria-label="予定の時計"></svg>
+  <section class="now" id="nowBox"><div class="lbl">いま やること</div><div class="what" id="nowWhat"></div></section>
+  <div class="remain" id="remain"></div>
+  <div class="next"><span class="tag">つぎ</span><span class="dot" id="nextDot"></span><span class="t" id="nextTime"></span><span class="n" id="nextName"></span></div>
+  <ul class="list" id="list"></ul>
+  <button class="toggle" id="toggle" type="button"></button>
+  <div class="note" id="note"></div>
+</div>
+
+<script>
+(function(){
+const COLORS={prep:"#F6D5C4",move:"#E4DED6",work:"#B9D4EE",lunch:"#F5E1A8",gym:"#BFE3CC",dinner:"#F2CFD9",task:"#D6CBEF",sleep:"#C8CCDD",none:"#EEF1F4"};
+const hm=(h,m)=>h*60+m;
+const WEEKDAY=[
+  [hm(5,50),hm(6,10),"起床・身支度","prep"],
+  [hm(6,10),hm(7,0),"通勤","move"],
+  [hm(7,0),hm(11,30),"仕事","work"],
+  [hm(11,30),hm(12,30),"ランチ","lunch"],
+  [hm(12,30),hm(16,30),"仕事","work"],
+  [hm(16,30),hm(17,0),"ジムへ移動","move"],
+  [hm(17,0),hm(18,30),"ジム","gym"],
+  [hm(18,30),hm(19,0),"帰り道","move"],
+  [hm(19,0),hm(20,0),"夕食・ひと休み","dinner"],
+  [hm(20,0),hm(23,30),"作業","task"],
+  [hm(23,30),hm(24,0),"就寝","sleep"]
+];
+
+/* ---------- 日本の祝日 ---------- */
+function nthMonday(y,m,n){const f=new Date(y,m-1,1).getDay();return 1+((8-f)%7)+(n-1)*7;}
+function shunbun(y){return Math.floor(20.8431+0.242194*(y-1980)-Math.floor((y-1980)/4));}
+function shubun(y){return Math.floor(23.2488+0.242194*(y-1980)-Math.floor((y-1980)/4));}
+function baseHoliday(d){
+  const y=d.getFullYear(),m=d.getMonth()+1,dd=d.getDate();
+  const fixed={"1-1":"元日","2-11":"建国記念の日","2-23":"天皇誕生日","4-29":"昭和の日","5-3":"憲法記念日","5-4":"みどりの日","5-5":"こどもの日","8-11":"山の日","11-3":"文化の日","11-23":"勤労感謝の日"};
+  if(fixed[m+"-"+dd])return fixed[m+"-"+dd];
+  if(m===1&&dd===nthMonday(y,1,2))return "成人の日";
+  if(m===7&&dd===nthMonday(y,7,3))return "海の日";
+  if(m===9&&dd===nthMonday(y,9,3))return "敬老の日";
+  if(m===10&&dd===nthMonday(y,10,2))return "スポーツの日";
+  if(m===3&&dd===shunbun(y))return "春分の日";
+  if(m===9&&dd===shubun(y))return "秋分の日";
+  return null;
+}
+function addDays(d,n){const x=new Date(d.getFullYear(),d.getMonth(),d.getDate()+n);return x;}
+function holidayName(d){
+  const b=baseHoliday(d);if(b)return b;
+  // 振替休日
+  for(let k=1;k<7;k++){
+    const p=addDays(d,-k);
+    if(!baseHoliday(p))break;
+    if(p.getDay()===0)return "振替休日";
+  }
+  // 国民の休日
+  if(d.getDay()!==0&&baseHoliday(addDays(d,-1))&&baseHoliday(addDays(d,1)))return "国民の休日";
+  return null;
+}
+
+/* ---------- 休み切り替え（端末内保存） ---------- */
+const KEY="imanani-overrides-v1";
+let mem={};
+function loadOv(){try{const s=localStorage.getItem(KEY);return s?JSON.parse(s):mem;}catch(e){return mem;}}
+function saveOv(o){mem=o;try{localStorage.setItem(KEY,JSON.stringify(o));}catch(e){}}
+const ymd=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+function defaultOff(d){const w=d.getDay();return w===0||w===6||!!holidayName(d);}
+function isOff(d){const o=loadOv()[ymd(d)];if(o==="off")return true;if(o==="work")return false;return defaultOff(d);}
+
+/* ---------- 1日の予定 ---------- */
+function blocks(d){
+  const prevWork=!isOff(addDays(d,-1));
+  if(!isOff(d)){
+    return [[0,hm(5,50),"就寝","sleep"],...WEEKDAY];
+  }
+  if(prevWork)return [[0,hm(5,50),"就寝","sleep"],[hm(5,50),hm(24,0),"お休み","none"]];
+  return [[0,hm(24,0),"お休み","none"]];
+}
+// 現在のブロック（同じ予定が日をまたいで続く場合は結合）と次の予定
+function timeline(now){
+  const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  const flat=[];
+  for(let i=-1;i<=8;i++){
+    const d=addDays(today,i);
+    blocks(d).forEach(b=>flat.push({s:new Date(d.getTime()+b[0]*60000),e:new Date(d.getTime()+b[1]*60000),name:b[2],cat:b[3]}));
+  }
+  // 結合
+  const m=[];
+  flat.forEach(b=>{const l=m[m.length-1];if(l&&l.name===b.name&&l.e.getTime()===b.s.getTime())l.e=b.e;else m.push({...b});});
+  const idx=m.findIndex(b=>now>=b.s&&now<b.e);
+  return {cur:m[idx],next:m[idx+1]};
+}
+
+/* ---------- 描画 ---------- */
+const WD=["日","月","火","水","木","金","土"];
+const fmt=dt=>String(dt.getHours()).padStart(2,"0")+":"+String(dt.getMinutes()).padStart(2,"0");
+const fmtMin=m=>String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");
+const NS="http://www.w3.org/2000/svg";
+function el(tag,attrs,text){const e=document.createElementNS(NS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);if(text!=null)e.textContent=text;return e;}
+function pt(r,deg){const a=(deg-90)*Math.PI/180;return [150+r*Math.cos(a),150+r*Math.sin(a)];}
+function arcPath(r,a0,a1){
+  const [x0,y0]=pt(r,a0),[x1,y1]=pt(r,a1);const large=(a1-a0)>180?1:0;
+  return `M${x0.toFixed(2)} ${y0.toFixed(2)} A${r} ${r} 0 ${large} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`;
+}
+
+function drawClock(now,dayBlocks,curName){
+  const svg=document.getElementById("clock");svg.innerHTML="";
+  const mins=now.getHours()*60+now.getMinutes()+now.getSeconds()/60;
+  const pm=mins>=720,off=pm?720:0;
+  const R=128,W=24;
+  svg.appendChild(el("circle",{cx:150,cy:150,r:R+W/2+4,fill:"#FFFFFF",stroke:"#E3E8EE","stroke-width":1.5}));
+  svg.appendChild(el("circle",{cx:150,cy:150,r:R,fill:"none",stroke:"#EEF1F4","stroke-width":W}));
+  dayBlocks.forEach(b=>{
+    const s=Math.max(b[0],off),e=Math.min(b[1],off+720);if(e<=s)return;
+    const a0=(s-off)/2,a1=(e-off)/2; // 720分=360度
+    const cur=(mins>=b[0]&&mins<b[1]);
+    const gap=a1-a0>3?0.6:0;
+    const p=el("path",{d:arcPath(R,a0+gap,a1-gap),fill:"none",stroke:COLORS[b[3]],"stroke-width":W,opacity:cur?1:0.42});
+    svg.appendChild(p);
+  });
+  // 目盛りと数字
+  for(let i=0;i<60;i++){
+    const big=i%5===0;const [x0,y0]=pt(R-W/2-3,i*6),[x1,y1]=pt(R-W/2-(big?11:6),i*6);
+    svg.appendChild(el("line",{x1:x0,y1:y0,x2:x1,y2:y1,stroke:big?"#5E6878":"#C9D0D9","stroke-width":big?2:1,"stroke-linecap":"round"}));
+  }
+  for(let h=1;h<=12;h++){
+    const [x,y]=pt(R-W/2-26,h*30);
+    const label=pm?(h===12?12:h+12):(h===12?(0):h);
+    svg.appendChild(el("text",{x,y,"text-anchor":"middle","dominant-baseline":"central","font-size":h%3===0?15:12,"font-weight":h%3===0?900:700,fill:h%3===0?"#2B3442":"#7A8494","font-family":"Zen Maru Gothic, sans-serif"},String(pm&&h===12?"12":(!pm&&h===12?"0":label))));
+  }
+  // 針
+  const ang=(mins-off)/2;
+  const [hx,hy]=pt(R+W/2-2,ang),[tx,ty]=pt(18,ang+180);
+  svg.appendChild(el("line",{x1:tx,y1:ty,x2:hx,y2:hy,stroke:"#2B3442","stroke-width":4,"stroke-linecap":"round"}));
+  svg.appendChild(el("circle",{cx:hx,cy:hy,r:5,fill:"#2B3442"}));
+  // 中央
+  const curCat=(dayBlocks.find(b=>mins>=b[0]&&mins<b[1])||[0,0,"","none"])[3];
+  svg.appendChild(el("circle",{cx:150,cy:150,r:52,fill:COLORS[curCat],stroke:"#FFFFFF","stroke-width":4}));
+  svg.appendChild(el("text",{x:150,y:132,"text-anchor":"middle","dominant-baseline":"central","font-size":13,"font-weight":700,fill:"#4A5464","font-family":"Zen Maru Gothic, sans-serif"},pm?"午後":"午前"));
+  svg.appendChild(el("text",{x:150,y:158,"text-anchor":"middle","dominant-baseline":"central","font-size":28,"font-weight":900,fill:"#2B3442","font-family":"Zen Maru Gothic, sans-serif","style":"font-variant-numeric:tabular-nums"},fmt(now)));
+}
+
+function render(){
+  const now=new Date();
+  const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  const hol=holidayName(today),off=isOff(today),ov=loadOv()[ymd(today)];
+  document.getElementById("dateText").textContent=`${now.getMonth()+1}月${now.getDate()}日（${WD[now.getDay()]}）`;
+  const badge=document.getElementById("dayBadge");
+  let bt=off?"お休み":"出勤日";
+  if(hol)bt=hol+(off?"・お休み":"・出勤");
+  else if(ov==="off")bt="お休み（切り替え）";
+  else if(ov==="work")bt="出勤日（切り替え）";
+  badge.textContent=bt;badge.className="badge"+(off?" off":"");
+
+  const dayBlocks=blocks(today);
+  const {cur,next}=timeline(now);
+  drawClock(now,dayBlocks,cur&&cur.name);
+
+  document.getElementById("nowBox").style.backgroundColor=COLORS[cur.cat];
+  document.getElementById("nowWhat").textContent=cur.name;
+  const left=Math.max(0,Math.ceil((cur.e-now)/60000));
+  const h=Math.floor(left/60),m=left%60;
+  const leftText=h>0?`${h}時間${m}分`:`${m}分`;
+  const sameDay=cur.e.getDate()===now.getDate()&&cur.e-now<86400000;
+  const endLabel=cur.e.getHours()===0&&cur.e.getMinutes()===0?"24:00":fmt(cur.e);
+  const dayPrefix=sameDay||endLabel==="24:00"?"":(cur.e-today<2*86400000?"明日 ":`${cur.e.getMonth()+1}/${cur.e.getDate()} `);
+  document.getElementById("remain").innerHTML=`${dayPrefix}${endLabel}まで・あと <b>${leftText}</b>`;
+
+  if(next){
+    document.getElementById("nextDot").style.background=COLORS[next.cat];
+    const nd=next.s.getDate()!==now.getDate()?(next.s-today<2*86400000?"明日 ":`${next.s.getMonth()+1}/${next.s.getDate()} `):"";
+    document.getElementById("nextTime").textContent=nd+fmt(next.s);
+    document.getElementById("nextName").textContent=next.name;
+  }
+
+  const mins=now.getHours()*60+now.getMinutes();
+  const ul=document.getElementById("list");ul.innerHTML="";
+  dayBlocks.forEach(b=>{
+    const li=document.createElement("li");
+    if(mins>=b[1])li.className="past";else if(mins>=b[0])li.className="cur";
+    if(li.className==="cur")li.style.background=COLORS[b[3]];
+    li.innerHTML=`<span class="dot" style="background:${COLORS[b[3]]}"></span><span class="t">${fmtMin(b[0])}〜${fmtMin(b[1])}</span><span class="n"></span>`;
+    li.querySelector(".n").textContent=b[2];
+    ul.appendChild(li);
+  });
+
+  document.getElementById("toggle").textContent=off?"今日を出勤日にする":"今日を休みにする";
+}
+
+document.getElementById("toggle").addEventListener("click",()=>{
+  const today=new Date();const k=ymd(today);const o=loadOv();
+  const want=isOff(today)?"work":"off";
+  const def=defaultOff(today)?"off":"work";
+  if(want===def)delete o[k];else o[k]=want;
+  // 古い切り替えは60日で掃除
+  const lim=ymd(addDays(today,-60));Object.keys(o).forEach(x=>{if(x<lim)delete o[x];});
+  saveOv(o);
+  document.getElementById("note").textContent=want==="off"?"今日をお休みにしました":"今日を出勤日にしました";
+  setTimeout(()=>{document.getElementById("note").textContent="";},2500);
+  render();
+});
+
+render();
+setInterval(render,15000);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)render();});
+window.addEventListener("pageshow",render);
+window.addEventListener("focus",render);
+})();
+</script>
+
+</body>
+</html>
