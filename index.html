@@ -66,6 +66,21 @@ body{
 .toggle:active{transform:scale(.98)}
 .toggle:focus-visible{outline:3px solid #B9D4EE;outline-offset:2px}
 .note{text-align:center;font-size:.78rem;color:var(--ink-faint);min-height:1em}
+.stand-btn{appearance:none;border:none;background:var(--ink);color:var(--card);font:inherit;font-weight:700;font-size:1rem;padding:14px;border-radius:16px;cursor:pointer;width:100%}
+.stand-btn:focus-visible{outline:3px solid #B9D4EE;outline-offset:2px}
+.hint{display:none}
+body.stand .wrap>*{display:none}
+body.stand .wrap>.clock,body.stand .wrap>#nowBox,body.stand .wrap>.remain,body.stand .wrap>.hint{display:block}
+body.stand .wrap{min-height:calc(100vh - 44px);min-height:calc(100dvh - 44px);justify-content:center;max-width:520px}
+body.stand .clock{max-width:min(100%,62vh)}
+body.stand .hint{text-align:center;font-size:.78rem;color:var(--ink-faint)}
+@media (orientation:landscape){
+  body.stand .wrap{display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-rows:1fr auto auto 1fr;column-gap:28px;row-gap:14px;max-width:none;align-items:center}
+  body.stand .clock{grid-row:1/5;width:min(82vh,52vw);max-width:none}
+  body.stand #nowBox{grid-row:2}
+  body.stand .remain{grid-row:3}
+  body.stand .hint{grid-row:4;align-self:start}
+}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -78,7 +93,9 @@ body{
   <div class="remain" id="remain"></div>
   <div class="next"><span class="tag">つぎ</span><span class="dot" id="nextDot"></span><span class="t" id="nextTime"></span><span class="n" id="nextName"></span></div>
   <ul class="list" id="list"></ul>
+  <button class="stand-btn" id="standBtn" type="button">置き時計モード（画面をつけっぱなし）</button>
   <button class="toggle" id="toggle" type="button"></button>
+  <div class="hint" id="hint">画面をタップすると戻ります</div>
   <div class="note" id="note"></div>
 </div>
 
@@ -272,9 +289,32 @@ document.getElementById("toggle").addEventListener("click",()=>{
   render();
 });
 
+/* ---------- 置き時計モード ---------- */
+let stand=false,lock=null;
+async function reqLock(){
+  try{
+    if(!("wakeLock" in navigator))return false;
+    lock=await navigator.wakeLock.request("screen");
+    lock.addEventListener("release",()=>{lock=null;});
+    return true;
+  }catch(e){return false;}
+}
+const hint=document.getElementById("hint");
+document.getElementById("standBtn").addEventListener("click",async e=>{
+  e.stopPropagation();
+  stand=true;document.body.classList.add("stand");window.scrollTo(0,0);
+  const ok=await reqLock();
+  hint.textContent=ok?"画面をタップすると戻ります":"この端末では画面のつけっぱなしに対応していません。設定の自動ロックを「なし」にしてください。タップで戻ります";
+});
+document.addEventListener("click",()=>{
+  if(!stand)return;
+  stand=false;document.body.classList.remove("stand");
+  if(lock){lock.release().catch(()=>{});lock=null;}
+});
+
 render();
 setInterval(render,15000);
-document.addEventListener("visibilitychange",()=>{if(!document.hidden)render();});
+document.addEventListener("visibilitychange",()=>{if(!document.hidden){render();if(stand&&!lock)reqLock();}});
 window.addEventListener("pageshow",render);
 window.addEventListener("focus",render);
 })();
